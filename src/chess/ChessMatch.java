@@ -1,5 +1,8 @@
 package chess;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import boardgame.Board;
 import boardgame.Piece;
 import boardgame.Position;
@@ -15,6 +18,9 @@ public class ChessMatch {
 	private boolean checkMate;
 	private ChessPiece enPassantVulnerable;
 	private ChessPiece promoted;
+	
+	private List<Piece> piecesOnTheBoard = new ArrayList<>();
+	private List<Piece> capturedPieces = new ArrayList<>();
 
 	public ChessMatch() {
 		board = new Board(8, 8);
@@ -39,8 +45,16 @@ public class ChessMatch {
 		return mat;
 	}
 	
+	public boolean getCheck() {
+		return check;
+	}
+	
 	public int getTurn() {
 		return turn;
+	}
+	
+	public boolean getCheckMate() {
+		return checkMate;
 	}
 	
 	public Color getCurrentPlayer() {
@@ -62,6 +76,25 @@ public class ChessMatch {
 		return board.piece(position).possibleMoves();
 	}
 	
+	public ChessPiece replacePromotedPiece(String type) {
+		if (promoted == null) {
+			throw new IllegalStateException("There is no piece to be promoted");
+		}
+		if (!type.equals("B") && !type.equals("N") && !type.equals("R") & !type.equals("Q")) {
+			return promoted;
+		}
+		
+		Position pos = promoted.getChessPosition().toPosition();
+		Piece p = board.removePiece(pos);
+		piecesOnTheBoard.remove(p);
+		
+		ChessPiece newPiece = newPiece(type, promoted.getColor());
+		board.placePiece(newPiece, pos);
+		piecesOnTheBoard.add(newPiece);
+		
+		return newPiece;
+	}
+	
 	public ChessPiece performChessMove(ChessPosition sourcePosition, ChessPosition targetPosition) {
 		Position source = sourcePosition.toPosition();
 		Position target = targetPosition.toPosition();
@@ -72,9 +105,50 @@ public class ChessMatch {
 	}
 	
 	private Piece makeMove(Position source, Position target) {
-		Piece p = board.removePiece(source);
+		ChessPiece p = (ChessPiece)board.removePiece(source);
+		p.increaseMoveCount();
 		Piece capturedPiece = board.removePiece(target);
 		board.placePiece(p, target);
+		
+		if (capturedPiece != null) {
+			piecesOnTheBoard.remove(capturedPiece);
+			capturedPieces.add(capturedPiece);
+		}
+		
+		// #specialmove castling kingside rook
+		if (p instanceof King && target.getColumn() == source.getColumn() + 2) {
+			Position sourceT = new Position(source.getRow(), source.getColumn() + 3);
+			Position targetT = new Position(source.getRow(), source.getColumn() + 1);
+			ChessPiece rook = (ChessPiece)board.removePiece(sourceT);
+			board.placePiece(rook, targetT);
+			rook.increaseMoveCount();
+		}
+
+		// #specialmove castling queenside rook
+		if (p instanceof King && target.getColumn() == source.getColumn() - 2) {
+			Position sourceT = new Position(source.getRow(), source.getColumn() - 4);
+			Position targetT = new Position(source.getRow(), source.getColumn() - 1);
+			ChessPiece rook = (ChessPiece)board.removePiece(sourceT);
+			board.placePiece(rook, targetT);
+			rook.increaseMoveCount();
+		}		
+		
+		// #specialmove en passant
+		if (p instanceof Pawn) {
+			if (source.getColumn() != target.getColumn() && capturedPiece == null) {
+				Position pawnPosition;
+				if (p.getColor() == Color.WHITE) {
+					pawnPosition = new Position(target.getRow() + 1, target.getColumn());
+				}
+				else {
+					pawnPosition = new Position(target.getRow() - 1, target.getColumn());
+				}
+				capturedPiece = board.removePiece(pawnPosition);
+				capturedPieces.add(capturedPiece);
+				piecesOnTheBoard.remove(capturedPiece);
+			}
+		}
+		
 		return capturedPiece;
 	}
 	
@@ -99,7 +173,7 @@ public class ChessMatch {
 
 	private void placeNewPiece(char column, int row, ChessPiece piece) {
 		board.placePiece(piece, new ChessPosition(column, row).toPosition());
-
+		piecesOnTheBoard.add(piece);
 	}
 
 	private void initialSetup() {
